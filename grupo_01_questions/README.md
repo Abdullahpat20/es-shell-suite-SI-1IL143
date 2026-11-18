@@ -17,7 +17,8 @@ Este módulo permite que el experto del dominio cree, edite, valide y guarde los
 ## Estado
 
 - **Stub inicial (Semana 11):** listo. Las operaciones básicas en memoria (`add`, `edit`, `delete`, `get`, `list`) funcionan con pruebas.
-- **Pendiente (Sprint 1):** `validate()`, `save_to_json()` y `load_from_json()` están declarados pero levantan `NotImplementedError`. Las pruebas marcadas `@pytest.mark.skip` corresponden a estos métodos.
+- **Persistencia JSON (Integrante A):** implementada y con pruebas activas.
+- **Pendiente (Sprint 1):** `validate()` y sus cuatro pruebas corresponden al Integrante B.
 
 ## Reparto de trabajo
 
@@ -79,8 +80,8 @@ class DependsOn:
 | `get_attribute(id)` | Devuelve un atributo | ✅ funciona |
 | `list_attributes()` | Lista todos en orden de inserción | ✅ funciona |
 | `validate()` | Verifica coherencia | ⏳ Sprint 1 — Abdullah |
-| `save_to_json(path)` | Escribe la sección `attributes` | ⏳ Sprint 1 — José Luis |
-| `load_from_json(path)` | Carga desde un JSON | ⏳ Sprint 1 — José Luis |
+| `save_to_json(path)` | Escribe la sección `attributes` | ✅ funciona |
+| `load_from_json(path)` | Carga desde un JSON | ✅ funciona |
 
 ### Excepciones
 
@@ -132,3 +133,20 @@ El archivo `datos_ejemplo/conocimiento_dominio.sample.json` muestra el formato d
 - **Edward (coordinador):** trabaja en ramas `grupo-01/<descripcion>` del repo central. Hace merge de los PRs de José Luis y Abdullah a `grupo-01`.
 - **José Luis y Abdullah:** hacen **fork** del repo central, trabajan en su fork dentro de `grupo_01_questions/`, y abren Pull Request desde su fork hacia la rama `grupo-01`.
 - Cuando el módulo esté terminado, Edward abre el PR final `grupo-01` → `develop`.
+
+
+### Persistencia JSON
+
+`save_to_json(path)` reemplaza únicamente `attributes` en un archivo existente;
+conserva `meta`, `rules` y cualquier otra sección. En un archivo nuevo crea
+metadatos iniciales y `rules: []`, siguiendo la estructura del ejemplo de G1.
+Usa UTF-8 y conserva `depends_on`, `help_text` y el orden de los atributos.
+`load_from_json(path)` reemplaza el estado solo después de leer todos los
+atributos; rechaza IDs duplicados y no cambia el estado si la carga falla.
+Los errores de lectura, JSON o serialización se propagan al llamador.
+
+El contrato `contracts/conocimiento_dominio.schema.json` está actualmente en
+`develop`, no en `grupo-01`. Exige al menos un atributo y una regla, mientras
+que el ejemplo de G1 contiene `rules: []`. Por ello, un archivo nuevo sin reglas
+es un documento de trabajo: G2 debe aportar reglas para validar el documento
+completo. La persistencia no implementa `validate()` ni inventa reglas del dominio.
