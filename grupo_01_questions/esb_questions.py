@@ -17,9 +17,8 @@ Este archivo expone:
 Alcance del stub (Semana 11):
 
 Los metodos de almacenamiento en memoria (``add``, ``edit``, ``delete``,
-``get``, ``list``) ya funcionan. ``validate``, ``save_to_json`` y
-``load_from_json`` estan declarados con sus firmas y levantan
-``NotImplementedError``; se implementan en el Sprint 1 (ver README.md).
+``get``, ``list``) y la persistencia JSON ya funcionan. ``validate`` sigue
+pendiente del Integrante B (ver README.md).
 
 Contrato de datos: la propuesta del Grupo 4 (SchemaManager) es la base. Los
 nombres de campo (``id``, ``name``, ``type``, ``question``, ``range``,
@@ -30,7 +29,9 @@ de ayuda.
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Optional
 
 # Tipos aceptados por el contrato propuesto por el Grupo 4.
@@ -225,15 +226,41 @@ class QuestionEditor:
         ya existe y contiene otras secciones (``meta``, ``rules``), debe
         preservarlas y reemplazar solo ``attributes``.
 
-        TODO Integrante A (Sprint 1).
+        Los archivos nuevos incluyen metadatos iniciales y una lista de reglas
+        vacia, como el ejemplo de G1; G2 debe agregar las reglas del dominio.
+        Los errores de lectura o serializacion no sobrescriben el archivo.
         """
-        raise NotImplementedError("save_to_json() se implementa en Sprint 1 (Integrante A).")
+        ruta = Path(path)
+        try:
+            datos = json.loads(ruta.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            datos = {
+                "meta": {
+                    "project_title": "Conocimiento del dominio",
+                    "version": "0.1",
+                    "author_group": "Grupo 1 - QuestionEditor",
+                },
+                "rules": [],
+            }
+        if not isinstance(datos, dict):
+            raise ValidationError("El documento JSON debe ser un objeto.")
+        datos["attributes"] = [attr.to_dict() for attr in self.list_attributes()]
+        contenido = json.dumps(datos, ensure_ascii=False, indent=2, allow_nan=False)
+        ruta.write_text(contenido + "\n", encoding="utf-8")
 
     def load_from_json(self, path: str) -> None:
         """Carga la seccion ``attributes`` desde ``path``.
 
         Sobrescribe el estado actual del editor con los atributos del archivo.
 
-        TODO Integrante A (Sprint 1).
+        Si la carga falla, conserva el estado anterior del editor.
         """
-        raise NotImplementedError("load_from_json() se implementa en Sprint 1 (Integrante A).")
+        datos = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(datos, dict) or not isinstance(datos.get("attributes"), list):
+            raise ValidationError("El documento debe contener una lista 'attributes'.")
+        nuevo = QuestionEditor()
+        for atributo in datos["attributes"]:
+            if not isinstance(atributo, dict):
+                raise ValidationError("Cada atributo debe ser un objeto.")
+            nuevo.add_attribute(Attribute.from_dict(atributo))
+        self._attributes = nuevo._attributes

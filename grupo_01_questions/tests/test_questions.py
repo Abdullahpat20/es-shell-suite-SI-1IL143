@@ -9,6 +9,9 @@ todavia no se implementan en el stub. Cuando el Integrante responsable las
 implemente, debe quitar el marcador ``skip`` para que la prueba corra.
 """
 
+import json
+from pathlib import Path
+
 import pytest
 
 from grupo_01_questions import (
@@ -17,6 +20,7 @@ from grupo_01_questions import (
     AttributeNotFoundError,
     DependsOn,
     QuestionEditor,
+    ValidationError,
 )
 
 
@@ -144,7 +148,6 @@ def test_validate_rechaza_depends_on_a_atributo_inexistente():
     assert resultado["valido"] is False
 
 
-@pytest.mark.skip(reason="save/load pendiente - Integrante A")
 def test_round_trip_json(tmp_path):
     ruta = tmp_path / "conocimiento.json"
     editor = QuestionEditor()
@@ -163,7 +166,6 @@ def test_round_trip_json(tmp_path):
     assert otro.get_attribute("promedio").range == [0.0, 3.0]
 
 
-@pytest.mark.skip(reason="save/load pendiente - Integrante A")
 def test_load_preserva_depends_on(tmp_path):
     ruta = tmp_path / "conocimiento.json"
     editor = QuestionEditor()
@@ -180,3 +182,92 @@ def test_load_preserva_depends_on(tmp_path):
     detalle = otro.get_attribute("detalle")
     assert detalle.depends_on is not None
     assert detalle.depends_on.attribute_id == "materia"
+
+
+def test_save_preserva_otras_secciones(tmp_path):
+    ruta = tmp_path / "dominio.json"
+    datos = {"meta": {"titulo": "Evaluación"}, "rules": [{"id": "r1"}],
+             "extension": {"activo": True}, "attributes": []}
+    ruta.write_text(json.dumps(datos), encoding="utf-8")
+    editor = QuestionEditor()
+    editor.add_attribute(Attribute(id="tesis", name="Título", type="text",
+                                   help_text="Escriba el título"))
+    editor.save_to_json(ruta)
+    guardado = json.loads(ruta.read_text(encoding="utf-8"))
+    assert guardado == {**datos, "attributes": [editor.get_attribute("tesis").to_dict()]}
+    assert "Título" in ruta.read_text(encoding="utf-8")
+
+
+def test_load_sample_reemplaza_estado_y_conserva_campos(tmp_path):
+    muestra = Path(__file__).parents[1] / "datos_ejemplo/conocimiento_dominio.sample.json"
+    editor = QuestionEditor()
+    editor.add_attribute(Attribute(id="viejo", name="Viejo", type="text"))
+    editor.load_from_json(muestra)
+    datos = json.loads(muestra.read_text(encoding="utf-8"))
+    assert [a.to_dict() for a in editor.list_attributes()] == datos["attributes"]
+    ruta = tmp_path / "nuevo.json"
+    editor.save_to_json(ruta)
+    guardado = json.loads(ruta.read_text(encoding="utf-8"))
+    assert guardado["attributes"] == datos["attributes"]
+    assert guardado["rules"] == []
+    assert set(guardado["meta"]) == {"project_title", "version", "author_group"}
+
+
+@pytest.mark.parametrize("contenido, error", [
+    ("{", json.JSONDecodeError),
+    ("[]", ValidationError),
+    ('{"attributes": {}}', ValidationError),
+    ('{"attributes": [{"id": "nuevo", "name": "Nuevo", "type": "text"}, {}]}', KeyError),
+    ('{"attributes": [null]}', ValidationError),
+    ('{"attributes": [{"id": "x", "name": "X", "type": "text"}, '
+     '{"id": "x", "name": "Otro", "type": "text"}]}', AttributeExistsError),
+])
+def test_load_fallido_conserva_estado(tmp_path, contenido, error):
+    ruta = tmp_path / "dominio.json"
+    ruta.write_text(contenido, encoding="utf-8")
+    editor = QuestionEditor()
+    previo = Attribute(id="previo", name="Previo", type="text")
+    editor.add_attribute(previo)
+    with pytest.raises(error):
+        editor.load_from_json(ruta)
+    assert editor.list_attributes() == [previo]
+
+
+@pytest.mark.parametrize("contenido, error", [("{", json.JSONDecodeError),
+                                              ("[]", ValidationError)])
+def test_save_no_sobrescribe_documento_invalido(tmp_path, contenido, error):
+    ruta = tmp_path / "dominio.json"
+    ruta.write_text(contenido, encoding="utf-8")
+    with pytest.raises(error):
+        QuestionEditor().save_to_json(ruta)
+    assert ruta.read_text(encoding="utf-8") == contenido
+
+
+def test_save_error_serializacion_conserva_archivo(tmp_path):
+    ruta = tmp_path / "dominio.json"
+    ruta.write_text('{"meta": {}, "rules": []}', encoding="utf-8")
+    previo = ruta.read_bytes()
+    editor = QuestionEditor()
+    editor.add_attribute(Attribute(id="x", name="X", type="numeric",
+                                   range=[0, float("nan")]))
+    with pytest.raises(ValueError):
+        editor.save_to_json(ruta)
+    assert ruta.read_bytes() == previo
+
+
+def test_load_lista_vacia_limpia_editor(tmp_path):
+    ruta = tmp_path / "dominio.json"
+    ruta.write_text('{"attributes": []}', encoding="utf-8")
+    editor = QuestionEditor()
+    editor.add_attribute(Attribute(id="x", name="X", type="text"))
+    editor.load_from_json(ruta)
+    assert editor.list_attributes() == []
+
+
+def test_load_archivo_inexistente_conserva_estado(tmp_path):
+    editor = QuestionEditor()
+    previo = Attribute(id="x", name="X", type="text")
+    editor.add_attribute(previo)
+    with pytest.raises(FileNotFoundError):
+        editor.load_from_json(tmp_path / "inexistente.json")
+    assert editor.list_attributes() == [previo]
